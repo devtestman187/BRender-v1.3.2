@@ -54,12 +54,13 @@ static struct br_tv_template_entry devicePixelmapTemplateEntries[] = {
 #undef F
 
 /*
- * (Re)allocate the renderbuffers at the current window (drawable) size and
+ * (Re)allocate the renderbuffers at the pixelmap's logical resolution and
  * attach them to the off-screen target's framebuffer.
  *
- * The scene is rasterised through glViewport() scaled up to the window (see
- * DevicePixelmapGLGetViewport()), so the render target has to match the
- * window's drawable size rather than the pixelmap's logical size.
+ * The scene is rasterised 1:1 into this target (see
+ * DevicePixelmapGLGetRenderViewport()) at the game's native resolution; the
+ * present path scales the finished frame up to the window. The render
+ * resolution therefore no longer follows the window/drawable size.
  */
 br_error DevicePixelmapGLEnsureRenderbuffers(br_device_pixelmap* self) {
     br_device_pixelmap* depthbuffer;
@@ -80,7 +81,8 @@ br_error DevicePixelmapGLEnsureRenderbuffers(br_device_pixelmap* self) {
     if (depthbuffer != NULL && depthbuffer->asDepth.glDepth == 0)
         glGenTextures(1, &depthbuffer->asDepth.glDepth);
 
-    DevicePixelmapGLGetFramebufferSize(self->screen, &width, &height);
+    width = self->pm_width;
+    height = self->pm_height;
     if (width <= 0 || height <= 0)
         return BRE_FAIL;
 
@@ -634,14 +636,13 @@ br_error BR_CMETHOD_DECL(br_device_pixelmap_gl, flush)(br_device_pixelmap* self)
     // render locked pixels to the off-screen target, ignoring purple pixels
     {
         GLint previous_fbo;
-        int x, y;
-        float width_m, height_m;
+        int x, y, width, height;
 
-        DevicePixelmapGLGetViewport(self->screen, &x, &y, &width_m, &height_m);
+        DevicePixelmapGLGetRenderViewport(self, &x, &y, &width, &height);
 
         glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &previous_fbo);
         RenderFullScreenTextureToFrameBuffer(self->screen, self->asBack.overlayTexture, self->asBack.glFbo, 0, 1, x, y,
-            (int)(self->pm_width * width_m), (int)(self->pm_height * height_m), 0);
+            width, height, 0);
         glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)previous_fbo);
     }
 

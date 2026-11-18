@@ -77,6 +77,52 @@ void DevicePixelmapGLGetFramebufferSize(br_device_pixelmap* self, br_int_32* wid
     *height = (br_int_32)(self->pm_height * height_multiplier) + 2 * y;
 }
 
+/*
+ * The rect, in window (drawable) pixels, that the logical pixelmap is presented
+ * into. The harness letterboxes it to preserve the game's aspect ratio, e.g.
+ * 240,0 + 1440x1080 inside a 1920x1080 window.
+ */
+void DevicePixelmapGLGetViewportRect(br_device_pixelmap* self, int* x, int* y, int* width, int* height)
+{
+    float width_multiplier, height_multiplier;
+
+    if(self == NULL || x == NULL || y == NULL || width == NULL || height == NULL)
+        return;
+
+    DevicePixelmapGLGetViewport(self, x, y, &width_multiplier, &height_multiplier);
+
+    *width = (int)(self->pm_width * width_multiplier);
+    *height = (int)(self->pm_height * height_multiplier);
+}
+
+/*
+ * Map a pixelmap into its off-screen framebuffer 1:1, in OpenGL viewport
+ * coordinates ((0, 0) at the bottom left). The game renders at its native
+ * logical resolution into the off-screen target and the present path scales the
+ * finished frame up to the window, so no harness viewport scale is applied
+ * here; only the sub-pixelmap offsets (e.g. the rear view mirror) remain.
+ */
+void DevicePixelmapGLGetRenderViewport(br_device_pixelmap* self, int* x, int* y, int* width, int* height)
+{
+    br_int_16 base_y = 0;
+
+    if(self == NULL || x == NULL || y == NULL || width == NULL || height == NULL)
+        return;
+
+    if(self->pm_base_y != 0) {
+        if(self->sub_pixelmap) {
+            base_y = self->parent_height - self->pm_height - self->pm_base_y;
+        } else {
+            base_y = self->pm_height - self->pm_base_y;
+        }
+    }
+
+    *x = self->pm_base_x;
+    *y = base_y;
+    *width = self->pm_width;
+    *height = self->pm_height;
+}
+
 br_uint_8 DeviceGLTypeOrBits(br_uint_8 pixel_type, br_int_32 pixel_bits)
 {
     if(pixel_type != BR_PMT_MAX)

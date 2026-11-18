@@ -327,6 +327,17 @@ br_error BR_CMETHOD_DECL(br_device_pixelmap_glf, resize)(br_device_pixelmap* sel
     return BRE_OK;
 }
 
+/*
+ * The present path only draws the letterboxed game view, so the window area
+ * outside the harness viewport has to be cleared each frame.
+ */
+static void clearWindow(void) {
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glDisable(GL_SCISSOR_TEST);
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+}
+
 br_error BR_CMETHOD_DECL(br_device_pixelmap_glf, doubleBuffer)(br_device_pixelmap* self, br_device_pixelmap* src) {
 
     /*
@@ -342,26 +353,30 @@ br_error BR_CMETHOD_DECL(br_device_pixelmap_glf, doubleBuffer)(br_device_pixelma
         return BRE_UNSUPPORTED;
     }
 
-    // make sure the off-screen target matches the current window size
+    // make sure the off-screen target matches the pixelmap's logical resolution
     (void)DevicePixelmapGLEnsureRenderbuffers(src);
 
     // ensure all dirty pixel writes have been flushed
     BrPixelmapFlush((br_pixelmap*)src);
 
     /*
-     * Present the off-screen colour target to the window through the
-     * fullscreen quad. The render target is already drawable-sized, so this is
-     * a 1:1 copy; FBO textures are bottom-up in memory and so need flipping
-     * (the overlay texture is uploaded top-down, hence flip=0 in
-     * devpixmp.c flush()).
+     * Present the off-screen colour target to the window through the fullscreen
+     * quad. The scene target is rendered at the game's native logical
+     * resolution, so this scales it into the harness' letterboxed viewport. FBO
+     * textures are bottom-up in memory and so need flipping (the overlay
+     * texture is uploaded top-down, hence flip=0 in devpixmp.c flush()).
      */
     if (src->asBack.glFboTex != 0) {
-        br_int_32 framebuffer_width, framebuffer_height;
+        int x, y, width, height;
 
-        DevicePixelmapGLGetFramebufferSize(self, &framebuffer_width, &framebuffer_height);
-        if (framebuffer_width > 0 && framebuffer_height > 0) {
-            RenderFullScreenTextureToFrameBuffer(self, src->asBack.glFboTex, 0, 1, 0, 0, 0, framebuffer_width,
-                framebuffer_height, 1);
+        DevicePixelmapGLGetViewportRect(self, &x, &y, &width, &height);
+        if (width > 0 && height > 0) {
+            /*
+             * The present blit only covers the game view, so clear the bars
+             * around it first (the window may be larger than the view).
+             */
+            clearWindow();
+            RenderFullScreenTextureToFrameBuffer(self, src->asBack.glFboTex, 0, 1, 0, x, y, width, height, 1);
         }
     }
 

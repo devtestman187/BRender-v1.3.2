@@ -60,9 +60,7 @@ br_renderer* RendererGLAllocate(br_device* device, br_renderer_facility* facilit
 }
 
 static void BR_CMETHOD_DECL(br_renderer_gl, sceneBegin)(br_renderer* self) {
-    br_uint_16 base_y = 0;
-    int x, y;
-    float rx, ry;
+    int x, y, width, height;
     HVIDEO hVideo = &self->pixelmap->screen->asFront.video;
     br_device_pixelmap *colour_target = NULL, *depth_target = NULL;
 
@@ -93,8 +91,8 @@ static void BR_CMETHOD_DECL(br_renderer_gl, sceneBegin)(br_renderer* self) {
     }
 
     /*
-     * Make sure the off-screen target's renderbuffers match the current
-     * window (drawable) size; they can change when the window is resized.
+     * Make sure the off-screen target's renderbuffers match the pixelmap's
+     * logical resolution; they can change if the game switches resolution.
      */
     if (self->pixelmap->use_type == BRT_NONE && self->pixelmap->asFront.backbuffer != NULL)
         (void)DevicePixelmapGLEnsureRenderbuffers(self->pixelmap->asFront.backbuffer);
@@ -113,17 +111,14 @@ static void BR_CMETHOD_DECL(br_renderer_gl, sceneBegin)(br_renderer* self) {
     glBindBufferBase(GL_UNIFORM_BUFFER, hVideo->brenderProgram.blockBindingScene, hVideo->brenderProgram.uboScene);
     glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(self->state.cache.scene), &self->state.cache.scene);
 
-    // OpenGL upside downness
-    if (colour_target->pm_base_y != 0) {
-        if (colour_target->sub_pixelmap) {
-            base_y = colour_target->parent_height - colour_target->pm_height - colour_target->pm_base_y;
-        } else {
-            base_y = colour_target->pm_height - colour_target->pm_base_y;
-        }
-    }
-
-    DevicePixelmapGLGetViewport(colour_target->screen, &x, &y, &rx, &ry);
-    glViewport(colour_target->pm_base_x * rx + x, base_y *ry + y, colour_target->pm_width * rx, colour_target->pm_height * ry);
+    /*
+     * Render 1:1 into the off-screen target at the game's native logical
+     * resolution; the present path scales the finished frame up to the window.
+     * Sub-pixelmap offsets (e.g. the rear view mirror) are handled by the
+     * helper.
+     */
+    DevicePixelmapGLGetRenderViewport(colour_target, &x, &y, &width, &height);
+    glViewport(x, y, width, height);
 
     /* Bind the model UBO here, it's faster than doing it for each model group */
     glBindBufferBase(GL_UNIFORM_BUFFER, hVideo->brenderProgram.blockBindingModel, hVideo->brenderProgram.uboModel);

@@ -169,6 +169,8 @@ void DeviceGLDrawQuad(br_device_pixelmap_gl_quad* self);
  */
 br_error DevicePixelmapGLBindFramebuffer(GLenum target, br_device_pixelmap* pm);
 void DevicePixelmapGLGetFramebufferSize(br_device_pixelmap* self, br_int_32* width, br_int_32* height);
+void DevicePixelmapGLGetViewportRect(br_device_pixelmap* self, int* x, int* y, int* width, int* height);
+void DevicePixelmapGLGetRenderViewport(br_device_pixelmap* self, int* x, int* y, int* width, int* height);
 GLuint DeviceGLBuildWhiteTexture(void);
 GLuint DeviceGLBuildCheckerboardTexture(void);
 
