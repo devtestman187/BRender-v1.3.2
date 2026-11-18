@@ -3,24 +3,8 @@
  */
 
 #include "drv.h"
+#include "glrend_settings.h"
 #include <brassert.h>
-#include <stdlib.h>
-
-/*
- * Strength of the present-path sharpen. The shader's kernel sums to 1, so this
- * only controls edge contrast (0 = pass-through, ~0.3-0.5 = mild sharpening).
- */
-#define GLREND_SHARPEN_AMOUNT 0.4f
-
-/*
- * Runtime override so the sharpen strength can be A/B tuned without a rebuild:
- *   set GLREND_SHARPEN_AMOUNT=0.8
- * Unset/empty is the compiled-in default, so existing behaviour is unchanged.
- */
-static float get_sharpen_amount(void) {
-    const char* s = getenv("GLREND_SHARPEN_AMOUNT");
-    return (s != NULL && *s != '\0') ? (float)atof(s) : GLREND_SHARPEN_AMOUNT;
-}
 
 /*
  * Default dispatch table for device (defined at end of file)
@@ -159,7 +143,7 @@ void RenderFullScreenTextureToFrameBuffer(br_device_pixelmap* self, GLuint textu
          */
         glUseProgram(self->asFront.video.postProgram.program);
         glUniform1f(self->asFront.video.postProgram.uFlipVertically, (float)flipVertically);
-        glUniform1f(self->asFront.video.postProgram.uSharpenAmount, get_sharpen_amount());
+        glUniform1f(self->asFront.video.postProgram.uSharpenAmount, GLRendSettingSharpenAmount());
     } else {
         glUseProgram(self->asFront.video.defaultProgram.program);
         glUniform1f(self->asFront.video.defaultProgram.uFlipVertically, (float)flipVertically);

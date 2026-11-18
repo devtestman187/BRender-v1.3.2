@@ -19,13 +19,19 @@ void VIDEO_Close(HVIDEO hVideo);
 
 GLuint VIDEOI_CreateAndCompileShader(const char* name, GLenum type, const char* shader, size_t size);
 
+GLuint VIDEOI_CreateAndCompileShaderSoft(const char* name, GLenum type, const char* shader, size_t size);
+
 GLuint VIDEOI_LoadAndCompileShader(GLenum type, const char* path, const char* default_data, size_t default_size);
 
 GLuint VIDEOI_CreateAndCompileProgram(GLuint vert, GLuint frag);
 
+GLuint VIDEOI_CreateAndCompileProgramSoft(GLuint vert, GLuint frag);
+
 br_boolean VIDEOI_CompileDefaultShader(HVIDEO hVideo);
 
 br_boolean VIDEOI_CompilePostShader(HVIDEO hVideo);
+
+br_boolean VIDEOI_CompileFSRShaders(HVIDEO hVideo);
 
 br_boolean VIDEOI_CompileBRenderShader(HVIDEO hVideo, const char* vertPath, const char* fragPath);
 

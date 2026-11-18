@@ -3,6 +3,7 @@
  */
 #include "brassert.h"
 #include "drv.h"
+#include "glrend_settings.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -70,7 +71,7 @@ char* preprocessShader(char* shader, size_t size) {
     return processed;
 }
 
-GLuint VIDEOI_CreateAndCompileShader(const char *name, GLenum type, const char* shader, size_t size) {
+static GLuint create_and_compile_shader(const char *name, GLenum type, const char* shader, size_t size, br_boolean fatal) {
     GLuint s;
     GLint _size, status;
     char *processed_shader;
@@ -80,8 +81,12 @@ GLuint VIDEOI_CreateAndCompileShader(const char *name, GLenum type, const char* 
     // processed_shader was alloc'd from scratch
     processed_shader = preprocessShader(shader, size);
 
+    /*
+     * Use the length of the preprocessed text rather than the input size: the
+     * preprocessor drops lines, and the scratch buffer is not zero-filled.
+     */
     s = glCreateShader(type);
-    _size = (GLint)size;
+    _size = (GLint)strlen(processed_shader);
     glShaderSource(s, 1, (const GLchar * const *)&processed_shader, &_size);
     glCompileShader(s);
 
@@ -100,13 +105,26 @@ GLuint VIDEOI_CreateAndCompileShader(const char *name, GLenum type, const char* 
         glGetShaderInfoLog(s, maxLength, &maxLength, errorBuffer);
         errorBuffer[maxLength - 1] = '\0';
 
-        BR_FATAL2("VIDEO: Error compiling shader %s:\n%s", name, errorBuffer);
+        if (fatal) {
+            BR_FATAL2("VIDEO: Error compiling shader %s:\n%s", name, errorBuffer);
+        } else {
+            BR_WARNING2("VIDEO: Error compiling optional shader %s:\n%s", name, errorBuffer);
+            BrLogPrintf("GLREND: Error compiling optional shader %s:\n%s\n", name, errorBuffer);
+        }
         glDeleteShader(s);
         return 0;
     }
 
     GL_CHECK_ERROR();
     return s;
+}
+
+GLuint VIDEOI_CreateAndCompileShader(const char *name, GLenum type, const char* shader, size_t size) {
+    return create_and_compile_shader(name, type, shader, size, BR_TRUE);
+}
+
+GLuint VIDEOI_CreateAndCompileShaderSoft(const char *name, GLenum type, const char* shader, size_t size) {
+    return create_and_compile_shader(name, type, shader, size, BR_FALSE);
 }
 
 GLuint VIDEOI_LoadAndCompileShader(GLenum type, const char* path, const char* default_data, size_t default_size) {
@@ -130,7 +148,7 @@ GLuint VIDEOI_LoadAndCompileShader(GLenum type, const char* path, const char* de
     return shader;
 }
 
-GLuint VIDEOI_CreateAndCompileProgram(GLuint vert, GLuint frag) {
+static GLuint create_and_compile_program(GLuint vert, GLuint frag, br_boolean fatal) {
     GLuint program;
     GLint status;
 
@@ -156,7 +174,13 @@ GLuint VIDEOI_CreateAndCompileProgram(GLuint vert, GLuint frag) {
 
         glGetProgramInfoLog(program, maxLength, &maxLength, errorBuffer);
         errorBuffer[maxLength - 1] = '\0';
-        BR_FATAL1("VIDEO: Error linking program:\n%s", errorBuffer);
+
+        if (fatal) {
+            BR_FATAL1("VIDEO: Error linking program:\n%s", errorBuffer);
+        } else {
+            BR_WARNING1("VIDEO: Error linking optional program:\n%s", errorBuffer);
+            BrLogPrintf("GLREND: Error linking optional program:\n%s\n", errorBuffer);
+        }
 
         glDetachShader(program, vert);
         glDetachShader(program, frag);
@@ -168,11 +192,23 @@ GLuint VIDEOI_CreateAndCompileProgram(GLuint vert, GLuint frag) {
     return program;
 }
 
+GLuint VIDEOI_CreateAndCompileProgram(GLuint vert, GLuint frag) {
+    return create_and_compile_program(vert, frag, BR_TRUE);
+}
+
+GLuint VIDEOI_CreateAndCompileProgramSoft(GLuint vert, GLuint frag) {
+    return create_and_compile_program(vert, frag, BR_FALSE);
+}
+
 HVIDEO VIDEO_Open(HVIDEO hVideo, const char* vertShader, const char* fragShader) {
     if (hVideo == NULL) {
         BR_FATAL("VIDEO: Invalid handle.");
         return NULL;
     }
+
+    hVideo->fsrEasuProgram.program = 0;
+    hVideo->fsrRcasProgram.program = 0;
+    hVideo->fsrAvailable = BR_FALSE;
 
     glGetIntegerv(GL_MAX_UNIFORM_BLOCK_SIZE, &hVideo->maxUniformBlockSize);
     glGetIntegerv(GL_MAX_UNIFORM_BUFFER_BINDINGS, &hVideo->maxUniformBufferBindings);
@@ -193,7 +229,32 @@ HVIDEO VIDEO_Open(HVIDEO hVideo, const char* vertShader, const char* fragShader)
         return NULL;
     }
 
+    /*
+     * FSR1 is optional: if its shaders fail to compile (e.g. an OpenGL ES
+     * driver without highp fragment floats) fall back to the legacy present
+     * path instead of failing device creation. GL core enables FSR1 by
+     * default, OpenGL ES requires an explicit GLREND_FSR=1.
+     */
+    if (VIDEOI_CompileFSRShaders(hVideo)) {
+        int fsr_mode = GLRendSettingFSRMode();
+
+        if (fsr_mode > 0 || (fsr_mode < 0 && !glContextIsOpenGLES())) {
+            hVideo->fsrAvailable = BR_TRUE;
+            BrLogPrintf("GLREND: FSR1 enabled\n");
+        } else if (fsr_mode < 0) {
+            BrLogPrintf("GLREND: FSR1 disabled on OpenGL ES (set GLREND_FSR=1 to force)\n");
+        } else {
+            BrLogPrintf("GLREND: FSR1 disabled (GLREND_FSR=0)\n");
+        }
+    } else {
+        BrLogPrintf("GLREND: FSR1 unavailable, using legacy present path\n");
+    }
+
     if (!VIDEOI_CompileBRenderShader(hVideo, vertShader, fragShader)) {
+        if (hVideo->fsrRcasProgram.program != 0)
+            glDeleteProgram(hVideo->fsrRcasProgram.program);
+        if (hVideo->fsrEasuProgram.program != 0)
+            glDeleteProgram(hVideo->fsrEasuProgram.program);
         glDeleteProgram(hVideo->postProgram.program);
         glDeleteProgram(hVideo->defaultProgram.program);
         return NULL;
@@ -221,6 +282,12 @@ void VIDEO_Close(HVIDEO hVideo) {
 
     glDeleteProgram(hVideo->postProgram.program);
     glDeleteProgram(hVideo->defaultProgram.program);
+
+    if (hVideo->fsrRcasProgram.program != 0)
+        glDeleteProgram(hVideo->fsrRcasProgram.program);
+
+    if (hVideo->fsrEasuProgram.program != 0)
+        glDeleteProgram(hVideo->fsrEasuProgram.program);
 }
 
 br_error VIDEOI_BrPixelmapGetTypeDetails(br_uint_8 pmType, GLint* internalFormat, GLenum* format, GLenum* type,

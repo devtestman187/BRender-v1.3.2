@@ -21,6 +21,18 @@ add_custom_command(
         COMMAND "${CMAKE_COMMAND}" "-DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}" "-DFILE=post.frag.glsl" -P "${BRender_SOURCE_DIR}/cmake/EmbedResource.cmake"
         DEPENDS post.frag.glsl
 )
+# FSR1 shaders inline the vendored AMD headers (fsr1/ffx_a.h, fsr1/ffx_fsr1.h)
+# at build time; see cmake/EmbedShader.cmake.
+add_custom_command(
+        OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/fsr1_easu.frag.glsl.h"
+        COMMAND "${CMAKE_COMMAND}" "-DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}" "-DOUTPUT_DIR=${CMAKE_CURRENT_BINARY_DIR}" "-DFILE=fsr1_easu.frag.glsl" -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedShader.cmake"
+        DEPENDS fsr1_easu.frag.glsl fsr1/ffx_a.h fsr1/ffx_fsr1.h
+)
+add_custom_command(
+        OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/fsr1_rcas.frag.glsl.h"
+        COMMAND "${CMAKE_COMMAND}" "-DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}" "-DOUTPUT_DIR=${CMAKE_CURRENT_BINARY_DIR}" "-DFILE=fsr1_rcas.frag.glsl" -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedShader.cmake"
+        DEPENDS fsr1_rcas.frag.glsl fsr1/ffx_a.h fsr1/ffx_fsr1.h
+)
 add_custom_command(
         OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/brender.vert.glsl.h"
         COMMAND "${CMAKE_COMMAND}" "-DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}" "-DFILE=brender.vert.glsl" -P "${BRender_SOURCE_DIR}/cmake/EmbedResource.cmake"
@@ -50,8 +62,11 @@ source_group("STATE" FILES ${GLSTATE_FILES})
 
 set(VIDEO_FILES
         checkboard64.c
+        glrend_settings.c
+        glrend_settings.h
         shader_brender.c
         shader_default.c
+        shader_fsr1.c
         shader_post.c
         # shader_text.c
         video.c
@@ -155,6 +170,8 @@ add_library(glrend
         "${CMAKE_CURRENT_BINARY_DIR}/default.frag.glsl.h"
         "${CMAKE_CURRENT_BINARY_DIR}/post.vert.glsl.h"
         "${CMAKE_CURRENT_BINARY_DIR}/post.frag.glsl.h"
+        "${CMAKE_CURRENT_BINARY_DIR}/fsr1_easu.frag.glsl.h"
+        "${CMAKE_CURRENT_BINARY_DIR}/fsr1_rcas.frag.glsl.h"
         "${CMAKE_CURRENT_BINARY_DIR}/brender.vert.glsl.h"
         "${CMAKE_CURRENT_BINARY_DIR}/brender.frag.glsl.h"
         )

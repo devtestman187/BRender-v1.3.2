@@ -41,6 +41,30 @@ typedef struct _VIDEO {
         GLint uSharpenAmount;
     } postProgram;
 
+    /*
+     * FSR1 present-path programs (EASU upscale + RCAS sharpen). Only used when
+     * the game renders at its native resolution and the harness presents it
+     * scaled up into the window. See shader_fsr1.c.
+     */
+    struct {
+        GLuint program;
+        GLint uSource;       /* Sampler, sampler2D */
+        GLint uCon0;         /* AU4 constants from FsrEasuCon(), uvec4 */
+        GLint uCon1;
+        GLint uCon2;
+        GLint uCon3;
+    } fsrEasuProgram;
+
+    struct {
+        GLuint program;
+        GLint uSource;            /* Sampler, sampler2D */
+        GLint uCon0;              /* AU4 constant from FsrRcasCon(), uvec4 */
+        GLint uSourceRectOrigin;  /* Present rect origin, uvec2 */
+    } fsrRcasProgram;
+
+    /* Set when the FSR1 programs compiled and the platform wants them. */
+    br_boolean fsrAvailable;
+
     struct {
         GLuint program;
 
