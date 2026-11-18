@@ -59,6 +59,24 @@ br_error DevicePixelmapGLBindFramebuffer(GLenum target, br_device_pixelmap *pm)
     return BRE_OK;
 }
 
+void DevicePixelmapGLGetFramebufferSize(br_device_pixelmap* self, br_int_32* width, br_int_32* height)
+{
+    int x, y;
+    float width_multiplier, height_multiplier;
+
+    if(self == NULL || width == NULL || height == NULL)
+        return;
+
+    DevicePixelmapGLGetViewport(self, &x, &y, &width_multiplier, &height_multiplier);
+
+    /*
+     * The logical pixelmap is presented through a centred, scaled viewport, so
+     * recover the drawable size from the viewport origin and scale.
+     */
+    *width = (br_int_32)(self->pm_width * width_multiplier) + 2 * x;
+    *height = (br_int_32)(self->pm_height * height_multiplier) + 2 * y;
+}
+
 br_uint_8 DeviceGLTypeOrBits(br_uint_8 pixel_type, br_int_32 pixel_bits)
 {
     if(pixel_type != BR_PMT_MAX)

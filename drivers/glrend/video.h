@@ -30,6 +30,17 @@ typedef struct _VIDEO {
         GLint uDiscardPurplePixels;
     } defaultProgram;
 
+    /* Present-path sharpen program; only used by the doubleBuffer() blit. */
+    struct {
+        GLuint program;
+        GLint aPosition;     /* Position, vec3 */
+        GLint aColour;       /* Colour, vec3 */
+        GLint aUV;           /* UV, vec2 */
+        GLint uSampler;      /* Sampler, sampler2D */
+        GLint uFlipVertically;
+        GLint uSharpenAmount;
+    } postProgram;
+
     struct {
         GLuint program;
 

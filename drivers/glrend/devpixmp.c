@@ -54,11 +54,118 @@ static struct br_tv_template_entry devicePixelmapTemplateEntries[] = {
 #undef F
 
 /*
+ * (Re)allocate the renderbuffers at the current window (drawable) size and
+ * attach them to the off-screen target's framebuffer.
+ *
+ * The scene is rasterised through glViewport() scaled up to the window (see
+ * DevicePixelmapGLGetViewport()), so the render target has to match the
+ * window's drawable size rather than the pixelmap's logical size.
+ */
+br_error DevicePixelmapGLEnsureRenderbuffers(br_device_pixelmap* self) {
+    br_device_pixelmap* depthbuffer;
+    br_int_32 width, height;
+    GLint colour_width, colour_height, depth_width, depth_height;
+    GLenum status;
+
+    if (self == NULL || self->use_type != BRT_OFFSCREEN || self->screen == NULL || self->screen->use_type != BRT_NONE)
+        return BRE_FAIL;
+
+    if (self->asBack.glFbo == 0)
+        glGenFramebuffers(1, &self->asBack.glFbo);
+
+    if (self->asBack.glFboTex == 0)
+        glGenTextures(1, &self->asBack.glFboTex);
+
+    depthbuffer = self->asBack.depthbuffer;
+    if (depthbuffer != NULL && depthbuffer->asDepth.glDepth == 0)
+        glGenTextures(1, &depthbuffer->asDepth.glDepth);
+
+    DevicePixelmapGLGetFramebufferSize(self->screen, &width, &height);
+    if (width <= 0 || height <= 0)
+        return BRE_FAIL;
+
+    colour_width = colour_height = 0;
+    glBindTexture(GL_TEXTURE_2D, self->asBack.glFboTex);
+    glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &colour_width);
+    glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &colour_height);
+
+    depth_width = depth_height = 0;
+    if (depthbuffer != NULL) {
+        glBindTexture(GL_TEXTURE_2D, depthbuffer->asDepth.glDepth);
+        glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &depth_width);
+        glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &depth_height);
+    }
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    /*
+     * Only (re)allocate when the drawable size has changed (e.g. the window
+     * was resized) or the depth buffer was matched after the colour buffer.
+     */
+    if (colour_width == width && colour_height == height
+        && (depthbuffer == NULL || (depth_width == width && depth_height == height)))
+        return BRE_OK;
+
+    glBindFramebuffer(GL_FRAMEBUFFER, self->asBack.glFbo);
+
+    glBindTexture(GL_TEXTURE_2D, self->asBack.glFboTex);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, self->asBack.glFboTex, 0);
+
+    if (depthbuffer != NULL) {
+        glBindTexture(GL_TEXTURE_2D, depthbuffer->asDepth.glDepth);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, width, height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT,
+            NULL);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depthbuffer->asDepth.glDepth, 0);
+    }
+
+    status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    if (status != GL_FRAMEBUFFER_COMPLETE) {
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        BR_WARNING1("GLREND: Offscreen framebuffer is not complete (0x%x).", status);
+        return BRE_FAIL;
+    }
+
+    /*
+     * Give the new allocation defined content. The per-frame clear happens in
+     * br_renderer frameBegin() while this framebuffer is bound.
+     */
+    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    BrLogPrintf("GLREND: Offscreen FBO %dx%d colour=GL_RGB8 depth=GL_DEPTH_COMPONENT24\n", width, height);
+
+    GL_CHECK_ERROR();
+    return BRE_OK;
+}
+
+/*
  * (Re)create the renderbuffers and attach them to the framebuffer.
  */
 static br_error recreate_renderbuffers(br_device_pixelmap* self) {
-    return BRE_OK;
+    if (self->use_type == BRT_OFFSCREEN) {
+        /*
+         * Remember the screen's back buffer so sceneBegin() can make sure the
+         * renderbuffers match the window before rendering into it.
+         */
+        self->screen->asFront.backbuffer = self;
+        return DevicePixelmapGLEnsureRenderbuffers(self);
+    } else if (self->use_type == BRT_DEPTH) {
+        if (self->asDepth.backbuffer == NULL)
+            return BRE_FAIL;
 
+        return DevicePixelmapGLEnsureRenderbuffers(self->asDepth.backbuffer);
+    }
 
     return BRE_OK;
 }
@@ -322,8 +429,16 @@ br_error BR_CMETHOD_DECL(br_device_pixelmap_gl, rectangleFill)(br_device_pixelma
     VIDEOI_BrRectToGL((br_pixelmap*)self, rect);
 
     if (self->use_type == BRT_DEPTH) {
-        //glBindFramebuffer(GL_FRAMEBUFFER, self->asBack.depthbuffer->asBack.glFbo);
+        GLint previous_fbo;
+
+        /*
+         * The depth buffer belongs to its parent's framebuffer, so clear that
+         * rather than whichever framebuffer happens to be bound.
+         */
+        glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &previous_fbo);
+        (void)DevicePixelmapGLBindFramebuffer(GL_FRAMEBUFFER, self);
         glClear(GL_DEPTH_BUFFER_BIT);
+        glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)previous_fbo);
         return BRE_OK;
     }
 
@@ -352,10 +467,16 @@ br_error BR_CMETHOD_DECL(br_device_pixelmap_gl, rectangleFill)(br_device_pixelma
                 return BRE_UNSUPPORTED;
             }
         } else {
-            //glBindFramebuffer(GL_FRAMEBUFFER, self->asBack.glFbo);
+            GLint previous_fbo;
+
+            /*
+             * Clear the off-screen target rather than the window.
+             */
+            glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &previous_fbo);
+            (void)DevicePixelmapGLBindFramebuffer(GL_FRAMEBUFFER, self);
             //glClearColor(colour & 0xff, colour & 0xff, colour & 0xff, 0xff);
             glClear(GL_COLOR_BUFFER_BIT);
-            //glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)previous_fbo);
         }
 
     } else {
@@ -510,8 +631,19 @@ br_error BR_CMETHOD_DECL(br_device_pixelmap_gl, flush)(br_device_pixelmap* self)
     glBindTexture(GL_TEXTURE_2D, self->asBack.overlayTexture);
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, self->pm_width, self->pm_height, gl_format, gl_type, self->asBack.lockedPixels);
 
-    // render locked pixels to framebuffer texture, ignoring purple pixels
-    RenderFullScreenTextureToFrameBuffer(self->screen, self->asBack.overlayTexture, 0, 0, 1);
+    // render locked pixels to the off-screen target, ignoring purple pixels
+    {
+        GLint previous_fbo;
+        int x, y;
+        float width_m, height_m;
+
+        DevicePixelmapGLGetViewport(self->screen, &x, &y, &width_m, &height_m);
+
+        glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &previous_fbo);
+        RenderFullScreenTextureToFrameBuffer(self->screen, self->asBack.overlayTexture, self->asBack.glFbo, 0, 1, x, y,
+            (int)(self->pm_width * width_m), (int)(self->pm_height * height_m), 0);
+        glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)previous_fbo);
+    }
 
     // reset pixels back to gamedev purple
 

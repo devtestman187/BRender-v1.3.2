@@ -4,6 +4,23 @@
 
 #include "drv.h"
 #include <brassert.h>
+#include <stdlib.h>
+
+/*
+ * Strength of the present-path sharpen. The shader's kernel sums to 1, so this
+ * only controls edge contrast (0 = pass-through, ~0.3-0.5 = mild sharpening).
+ */
+#define GLREND_SHARPEN_AMOUNT 0.4f
+
+/*
+ * Runtime override so the sharpen strength can be A/B tuned without a rebuild:
+ *   set GLREND_SHARPEN_AMOUNT=0.8
+ * Unset/empty is the compiled-in default, so existing behaviour is unchanged.
+ */
+static float get_sharpen_amount(void) {
+    const char* s = getenv("GLREND_SHARPEN_AMOUNT");
+    return (s != NULL && *s != '\0') ? (float)atof(s) : GLREND_SHARPEN_AMOUNT;
+}
 
 /*
  * Default dispatch table for device (defined at end of file)
@@ -124,20 +141,30 @@ static void SetupFullScreenRectGeometry(br_device_pixelmap* self) {
     GL_CHECK_ERROR();
 }
 
-void RenderFullScreenTextureToFrameBuffer(br_device_pixelmap* self, GLuint textureId, GLuint fb, int flipVertically, int discardPurplePixels) {
+void RenderFullScreenTextureToFrameBuffer(br_device_pixelmap* self, GLuint textureId, GLuint fb, int flipVertically,
+    int discardPurplePixels, int x, int y, int width, int height, int sharpen) {
 
-    int x, y;
-    float width_m, height_m;
-    DevicePixelmapGLGetViewport(self, &x, &y, &width_m, &height_m);
-    glViewport(x, y, self->pm_width * width_m, self->pm_height * height_m);
+    glBindFramebuffer(GL_FRAMEBUFFER, fb);
+    glViewport(x, y, width, height);
 
     glDisable(GL_DEPTH_TEST);
     glBindTexture(GL_TEXTURE_2D, textureId);
     glBindVertexArray(self->asFront.screen_buffer_vao);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, self->asFront.screen_buffer_ebo);
-    glUseProgram(self->asFront.video.defaultProgram.program);
-    glUniform1f(self->asFront.video.defaultProgram.uFlipVertically, (float)flipVertically);
-    glUniform1i(self->asFront.video.defaultProgram.uDiscardPurplePixels, discardPurplePixels);
+    if (sharpen) {
+        /*
+         * Present path: run the off-screen colour through the sharpen
+         * post-process program. The overlay composite is still drawn into the
+         * FBO by defaultProgram, so the final image is sharpened exactly once.
+         */
+        glUseProgram(self->asFront.video.postProgram.program);
+        glUniform1f(self->asFront.video.postProgram.uFlipVertically, (float)flipVertically);
+        glUniform1f(self->asFront.video.postProgram.uSharpenAmount, get_sharpen_amount());
+    } else {
+        glUseProgram(self->asFront.video.defaultProgram.program);
+        glUniform1f(self->asFront.video.defaultProgram.uFlipVertically, (float)flipVertically);
+        glUniform1i(self->asFront.video.defaultProgram.uDiscardPurplePixels, discardPurplePixels);
+    }
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
     glBindVertexArray(0);
@@ -331,13 +358,42 @@ br_error BR_CMETHOD_DECL(br_device_pixelmap_glf, doubleBuffer)(br_device_pixelma
         return BRE_UNSUPPORTED;
     }
 
+    // make sure the off-screen target matches the current window size
+    (void)DevicePixelmapGLEnsureRenderbuffers(src);
+
     // ensure all dirty pixel writes have been flushed
     BrPixelmapFlush((br_pixelmap*)src);
 
+    /*
+     * Present the off-screen colour target to the window through the
+     * fullscreen quad. The render target is already drawable-sized, so this is
+     * a 1:1 copy; FBO textures are bottom-up in memory and so need flipping
+     * (the overlay texture is uploaded top-down, hence flip=0 in
+     * devpixmp.c flush()).
+     */
+    if (src->asBack.glFboTex != 0) {
+        br_int_32 framebuffer_width, framebuffer_height;
+
+        DevicePixelmapGLGetFramebufferSize(self, &framebuffer_width, &framebuffer_height);
+        if (framebuffer_width > 0 && framebuffer_height > 0) {
+            RenderFullScreenTextureToFrameBuffer(self, src->asBack.glFboTex, 0, 1, 0, 0, 0, framebuffer_width,
+                framebuffer_height, 1);
+        }
+    }
+
     DevicePixelmapGLSwapBuffers(self);
 
-    // prep for next frame
-    BrRendererFrameBegin();
+    /*
+     * Clear the off-screen target for the next frame. Previously frameBegin()
+     * cleared the window's back buffer here.
+     */
+    if (src->asBack.glFbo != 0) {
+        glBindFramebuffer(GL_FRAMEBUFFER, src->asBack.glFbo);
+        BrRendererFrameBegin();
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    } else {
+        BrRendererFrameBegin();
+    }
 
     GL_CHECK_ERROR();
 

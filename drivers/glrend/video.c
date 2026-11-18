@@ -188,7 +188,13 @@ HVIDEO VIDEO_Open(HVIDEO hVideo, const char* vertShader, const char* fragShader)
         return NULL;
     }
 
+    if (!VIDEOI_CompilePostShader(hVideo)) {
+        glDeleteProgram(hVideo->defaultProgram.program);
+        return NULL;
+    }
+
     if (!VIDEOI_CompileBRenderShader(hVideo, vertShader, fragShader)) {
+        glDeleteProgram(hVideo->postProgram.program);
         glDeleteProgram(hVideo->defaultProgram.program);
         return NULL;
     }
@@ -213,6 +219,7 @@ void VIDEO_Close(HVIDEO hVideo) {
     if (hVideo->brenderProgram.blockIndexModel != GL_INVALID_INDEX)
         glDeleteBuffers(0, &hVideo->brenderProgram.uboModel);
 
+    glDeleteProgram(hVideo->postProgram.program);
     glDeleteProgram(hVideo->defaultProgram.program);
 }
 

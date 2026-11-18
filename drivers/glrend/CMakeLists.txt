@@ -12,6 +12,16 @@ add_custom_command(
         DEPENDS default.frag.glsl
 )
 add_custom_command(
+        OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/post.vert.glsl.h"
+        COMMAND "${CMAKE_COMMAND}" "-DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}" "-DFILE=post.vert.glsl" -P "${BRender_SOURCE_DIR}/cmake/EmbedResource.cmake"
+        DEPENDS post.vert.glsl
+)
+add_custom_command(
+        OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/post.frag.glsl.h"
+        COMMAND "${CMAKE_COMMAND}" "-DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}" "-DFILE=post.frag.glsl" -P "${BRender_SOURCE_DIR}/cmake/EmbedResource.cmake"
+        DEPENDS post.frag.glsl
+)
+add_custom_command(
         OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/brender.vert.glsl.h"
         COMMAND "${CMAKE_COMMAND}" "-DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}" "-DFILE=brender.vert.glsl" -P "${BRender_SOURCE_DIR}/cmake/EmbedResource.cmake"
         DEPENDS brender.vert.glsl
@@ -42,6 +52,7 @@ set(VIDEO_FILES
         checkboard64.c
         shader_brender.c
         shader_default.c
+        shader_post.c
         # shader_text.c
         video.c
         video.h
@@ -142,6 +153,8 @@ add_library(glrend
 
         "${CMAKE_CURRENT_BINARY_DIR}/default.vert.glsl.h"
         "${CMAKE_CURRENT_BINARY_DIR}/default.frag.glsl.h"
+        "${CMAKE_CURRENT_BINARY_DIR}/post.vert.glsl.h"
+        "${CMAKE_CURRENT_BINARY_DIR}/post.frag.glsl.h"
         "${CMAKE_CURRENT_BINARY_DIR}/brender.vert.glsl.h"
         "${CMAKE_CURRENT_BINARY_DIR}/brender.frag.glsl.h"
         )

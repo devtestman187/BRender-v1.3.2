@@ -103,11 +103,24 @@ typedef struct br_device_pixelmap {
             GLuint screen_buffer_vao, screen_buffer_ebo;
 
             br_int_32 num_refs;
+
+            /*
+             * Off-screen match of this screen, if one has been allocated.
+             * Used to keep its renderbuffers in sync with the window size.
+             */
+            struct br_device_pixelmap* backbuffer;
         } asFront;
         struct {
             struct br_device_pixelmap* depthbuffer;
             GLuint glFbo;
             GLuint glTex;
+
+            /*
+             * Colour attachment for glFbo. Deliberately separate from glTex:
+             * glTex is the upload target of rectangleCopyTo(), which is
+             * currently inert (texture 0) and must stay that way.
+             */
+            GLuint glFboTex;
             GLfloat clearColour[4];
 
             // This is to emulate the ability to lock the backbuffer and write to it as if it
@@ -128,7 +141,8 @@ typedef struct br_device_pixelmap {
     struct br_device_clut* clut;
 } br_device_pixelmap;
 
-void RenderFullScreenTextureToFrameBuffer(br_device_pixelmap* self, GLuint textureId, GLuint fb, int flipVertically, int discardPurplePixels);
+void RenderFullScreenTextureToFrameBuffer(br_device_pixelmap* self, GLuint textureId, GLuint fb, int flipVertically,
+    int discardPurplePixels, int x, int y, int width, int height, int sharpen);
 
 #endif
 

@@ -92,6 +92,20 @@ static void BR_CMETHOD_DECL(br_renderer_gl, sceneBegin)(br_renderer* self) {
         BR_ERROR("Can't render without a destination");
     }
 
+    /*
+     * Make sure the off-screen target's renderbuffers match the current
+     * window (drawable) size; they can change when the window is resized.
+     */
+    if (self->pixelmap->use_type == BRT_NONE && self->pixelmap->asFront.backbuffer != NULL)
+        (void)DevicePixelmapGLEnsureRenderbuffers(self->pixelmap->asFront.backbuffer);
+
+    /*
+     * Render into the off-screen target's framebuffer. If it doesn't have one
+     * (e.g. framebuffer creation failed) this binds the default framebuffer,
+     * which is the pre-FBO behaviour.
+     */
+    (void)DevicePixelmapGLBindFramebuffer(GL_FRAMEBUFFER, colour_target);
+
     StateGLReset(&self->state.cache);
     StateGLUpdateScene(&self->state.cache, self->state.current);
 

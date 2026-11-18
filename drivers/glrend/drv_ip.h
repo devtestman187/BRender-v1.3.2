@@ -25,6 +25,8 @@ GLuint VIDEOI_CreateAndCompileProgram(GLuint vert, GLuint frag);
 
 br_boolean VIDEOI_CompileDefaultShader(HVIDEO hVideo);
 
+br_boolean VIDEOI_CompilePostShader(HVIDEO hVideo);
+
 br_boolean VIDEOI_CompileBRenderShader(HVIDEO hVideo, const char* vertPath, const char* fragPath);
 
 GLuint VIDEO_BrPixelmapToGLTexture(br_pixelmap* pm);
@@ -65,6 +67,8 @@ br_renderer* RendererGLAllocate(br_device* device, br_renderer_facility* facilit
  */
 br_error BR_CMETHOD_DECL(br_device_pixelmap_gl, match)(br_device_pixelmap* self, br_device_pixelmap** newpm,
     br_token_value* tv);
+
+br_error DevicePixelmapGLEnsureRenderbuffers(br_device_pixelmap* pm);
 /*
  * devpmgl.c
  */
@@ -158,6 +162,7 @@ void DeviceGLDrawQuad(br_device_pixelmap_gl_quad* self);
  * util.c
  */
 br_error DevicePixelmapGLBindFramebuffer(GLenum target, br_device_pixelmap* pm);
+void DevicePixelmapGLGetFramebufferSize(br_device_pixelmap* self, br_int_32* width, br_int_32* height);
 GLuint DeviceGLBuildWhiteTexture(void);
 GLuint DeviceGLBuildCheckerboardTexture(void);
 
