@@ -62,6 +62,17 @@ typedef struct _VIDEO {
         GLint uSourceRectOrigin;  /* Present rect origin, uvec2 */
     } fsrRcasProgram;
 
+    /*
+     * FSR1 upscale target: the EASU output at the present rect size, sampled by
+     * the RCAS pass. Reallocated when the window size changes.
+     */
+    struct {
+        GLuint fbo;
+        GLuint tex;
+        GLint width;
+        GLint height;
+    } fsrTarget;
+
     /* Set when the FSR1 programs compiled and the platform wants them. */
     br_boolean fsrAvailable;
 

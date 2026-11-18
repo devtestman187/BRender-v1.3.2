@@ -33,6 +33,12 @@ br_boolean VIDEOI_CompilePostShader(HVIDEO hVideo);
 
 br_boolean VIDEOI_CompileFSRShaders(HVIDEO hVideo);
 
+br_boolean VIDEOI_FSRShouldPresent(HVIDEO hVideo, int input_width, int input_height, int output_width,
+    int output_height);
+
+br_boolean VIDEOI_FSRPresent(br_device_pixelmap* self, GLuint source_tex, int input_width, int input_height, int x,
+    int y, int output_width, int output_height, float sharpness);
+
 br_boolean VIDEOI_CompileBRenderShader(HVIDEO hVideo, const char* vertPath, const char* fragPath);
 
 GLuint VIDEO_BrPixelmapToGLTexture(br_pixelmap* pm);

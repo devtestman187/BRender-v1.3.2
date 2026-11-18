@@ -208,6 +208,10 @@ HVIDEO VIDEO_Open(HVIDEO hVideo, const char* vertShader, const char* fragShader)
 
     hVideo->fsrEasuProgram.program = 0;
     hVideo->fsrRcasProgram.program = 0;
+    hVideo->fsrTarget.fbo = 0;
+    hVideo->fsrTarget.tex = 0;
+    hVideo->fsrTarget.width = 0;
+    hVideo->fsrTarget.height = 0;
     hVideo->fsrAvailable = BR_FALSE;
 
     glGetIntegerv(GL_MAX_UNIFORM_BLOCK_SIZE, &hVideo->maxUniformBlockSize);
@@ -288,6 +292,12 @@ void VIDEO_Close(HVIDEO hVideo) {
 
     if (hVideo->fsrEasuProgram.program != 0)
         glDeleteProgram(hVideo->fsrEasuProgram.program);
+
+    if (hVideo->fsrTarget.fbo != 0)
+        glDeleteFramebuffers(1, &hVideo->fsrTarget.fbo);
+
+    if (hVideo->fsrTarget.tex != 0)
+        glDeleteTextures(1, &hVideo->fsrTarget.tex);
 }
 
 br_error VIDEOI_BrPixelmapGetTypeDetails(br_uint_8 pmType, GLint* internalFormat, GLenum* format, GLenum* type,

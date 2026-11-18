@@ -362,9 +362,11 @@ br_error BR_CMETHOD_DECL(br_device_pixelmap_glf, doubleBuffer)(br_device_pixelma
     /*
      * Present the off-screen colour target to the window through the fullscreen
      * quad. The scene target is rendered at the game's native logical
-     * resolution, so this scales it into the harness' letterboxed viewport. FBO
-     * textures are bottom-up in memory and so need flipping (the overlay
-     * texture is uploaded top-down, hence flip=0 in devpixmp.c flush()).
+     * resolution. When FSR1 is available and there is an upscale to do, EASU
+     * scales it to the harness' letterboxed viewport and RCAS sharpens the
+     * result (replacing the legacy unsharp pass); otherwise the legacy blit is
+     * used. FBO textures are bottom-up in memory and so need flipping (the
+     * overlay texture is uploaded top-down, hence flip=0 in devpixmp.c flush()).
      */
     if (src->asBack.glFboTex != 0) {
         int x, y, width, height;
@@ -376,7 +378,12 @@ br_error BR_CMETHOD_DECL(br_device_pixelmap_glf, doubleBuffer)(br_device_pixelma
              * around it first (the window may be larger than the view).
              */
             clearWindow();
-            RenderFullScreenTextureToFrameBuffer(self, src->asBack.glFboTex, 0, 1, 0, x, y, width, height, 1);
+
+            if (!VIDEOI_FSRShouldPresent(&self->asFront.video, src->pm_width, src->pm_height, width, height)
+                || !VIDEOI_FSRPresent(self, src->asBack.glFboTex, src->pm_width, src->pm_height, x, y, width, height,
+                    GLRendSettingFSRSharpness())) {
+                RenderFullScreenTextureToFrameBuffer(self, src->asBack.glFboTex, 0, 1, 0, x, y, width, height, 1);
+            }
         }
     }
 

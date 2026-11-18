@@ -62,6 +62,8 @@ source_group("STATE" FILES ${GLSTATE_FILES})
 
 set(VIDEO_FILES
         checkboard64.c
+        fsr1_constants.c
+        fsr1_constants.h
         glrend_settings.c
         glrend_settings.h
         shader_brender.c
