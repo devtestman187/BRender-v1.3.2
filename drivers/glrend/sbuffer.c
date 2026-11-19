@@ -5,6 +5,7 @@
 
 #include "brassert.h"
 #include "drv.h"
+#include "texture_replace.h"
 
 /*
  * Default dispatch table for primitive state (defined at end of file)
@@ -153,6 +154,19 @@ static br_error updateMemory(br_buffer_stored* self, br_pixelmap* pm) {
     r = VIDEOI_BrPixelmapGetTypeDetails(pm->type, &internal_format, &format, &type, &elem_bytes, &self->blended);
     if (r != BRE_OK)
         return r;
+
+    /*
+     * Texture replacement: if the user supplied a higher-resolution image for
+     * this texture name, upload that instead of the paletted source.  The
+     * replacement leaves paletted_source_dirty FALSE and palette_pointer NULL,
+     * so the bind-time palette expansion in v1model.c is skipped and this
+     * texture simply keeps its authored colours.
+     */
+    if (pm->type == BR_PMT_INDEX_8 && TextureReplacementUpload(self, pm) == BR_TRUE) {
+        self->source = pm;
+        self->source_flags = pm->flags;
+        return BRE_OK;
+    }
 
     /*
      * If we're compatible, update the existing texture.

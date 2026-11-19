@@ -70,6 +70,9 @@ set(VIDEO_FILES
         shader_default.c
         shader_fsr1.c
         shader_post.c
+        stb_image.h
+        texture_replace.c
+        texture_replace.h
         # shader_text.c
         video.c
         video.h
